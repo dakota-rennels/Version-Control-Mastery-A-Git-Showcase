@@ -2,6 +2,7 @@ import sys
 import json
 import logging
 from pathlib import Path
+from datetime import datetime
 
 # Set up logging
 logging.basicConfig(
@@ -44,21 +45,36 @@ def save_tasks(tasks):
         logging.error(f"Failed to save tasks: {e}")
 
 
-def add_task(description):
+def validate_date(date_str):
+    """Validate the date format (YYYY-MM-DD)."""
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+
+def add_task(description, deadline=None):
     """Add a new task."""
     if not description.strip():
         logging.warning("Task description cannot be empty.")
         print("Error: Task description cannot be empty.")
         return
+
+    if deadline and not validate_date(deadline):
+        print("❌ Error: Invalid date format. Please use YYYY-MM-DD.")
+        return
+
     tasks = load_tasks()
     task = {
         "id": len(tasks) + 1,
         "description": description.strip(),
-        "completed": False
+        "completed": False,
+        "deadline": deadline.strip() if deadline else None
     }
     tasks.append(task)
     save_tasks(tasks)
-    print(f"✅ Task added: {description.strip()}")
+    print(f"✅ Task added: {description.strip()} {'(Deadline: ' + deadline + ')' if deadline else ''}")
 
 
 def list_tasks():
@@ -68,77 +84,54 @@ def list_tasks():
         print("No tasks available. 🗒️ Start by adding one using `add` command.")
         return
     print("\n🗒️ Your Tasks:")
-    print("-" * 30)
+    print("-" * 50)
     for task in tasks:
         status = "✓" if task["completed"] else "✗"
-        print(f"ID: {task['id']} | [{status}] {task['description']}")
-    print("-" * 30)
+        deadline = f"(Deadline: {task['deadline']})" if task["deadline"] else ""
+        print(f"ID: {task['id']} | [{status}] {task['description']} {deadline}")
+    print("-" * 50)
 
 
-def complete_task(task_id):
-    """Mark a task as completed."""
+def update_deadline(task_id, deadline):
+    """Update the deadline of a specific task."""
+    if not validate_date(deadline):
+        print("❌ Error: Invalid date format. Please use YYYY-MM-DD.")
+        return
+
     tasks = load_tasks()
-    task_id = int(task_id)
     task_found = False
     for task in tasks:
-        if task["id"] == task_id:
-            if task["completed"]:
-                print(f"⚠️ Task {task_id} is already marked as completed.")
-                return
-            task["completed"] = True
+        if task["id"] == int(task_id):
+            task["deadline"] = deadline
             task_found = True
             save_tasks(tasks)
-            print(f"✅ Task {task_id} completed: {task['description']}")
+            print(f"✅ Deadline updated for Task {task_id}: {deadline}")
             return
     if not task_found:
         print(f"⚠️ Task ID {task_id} not found.")
 
 
-def delete_task(task_id):
-    """Delete a task."""
-    tasks = load_tasks()
-    task_id = int(task_id)
-    filtered_tasks = [task for task in tasks if task["id"] != task_id]
-    if len(tasks) == len(filtered_tasks):
-        print(f"⚠️ Task ID {task_id} not found.")
-        return
-    for idx, task in enumerate(filtered_tasks, start=1):
-        task["id"] = idx  # Reassign IDs after deletion
-    save_tasks(filtered_tasks)
-    print(f"🗑️ Task {task_id} deleted.")
-
-
-def clear_all_tasks():
-    """Clear all tasks."""
-    confirmation = input("⚠️ Are you sure you want to delete all tasks? (y/n): ")
-    if confirmation.lower() == "y":
-        save_tasks([])
-        print("🗑️ All tasks have been cleared.")
-    else:
-        print("Operation canceled.")
-
-
 def print_help():
     """Display help text."""
     help_text = """
-    ✅ CLI To-Do List Tool
+    ✅ CLI To-Do List Tool with Deadlines
     --------------------------------------
     Usage: python todo.py [command] [arguments]
 
     Commands:
-        add [description]       Add a new task.
-        list                    List all tasks.
-        complete [id]           Mark a task as completed.
-        delete [id]             Delete a specific task by ID.
-        clear                   Delete all tasks.
-        help                    Show this help message.
+        add [description] [deadline]  Add a new task with an optional deadline (YYYY-MM-DD).
+        list                          List all tasks.
+        complete [id]                 Mark a task as completed.
+        delete [id]                   Delete a specific task by ID.
+        update-deadline [id] [date]   Update the deadline of a specific task.
+        help                          Show this help message.
 
     Examples:
-        python todo.py add "Buy groceries"
+        python todo.py add "Buy groceries" 2025-02-01
         python todo.py list
         python todo.py complete 1
         python todo.py delete 1
-        python todo.py clear
+        python todo.py update-deadline 1 2025-03-01
     --------------------------------------
     """
     print(help_text)
@@ -155,7 +148,8 @@ if __name__ == "__main__":
             if len(sys.argv) < 3:
                 print("❌ Error: Task description required.")
             else:
-                add_task(" ".join(sys.argv[2:]))
+                deadline = sys.argv[3] if len(sys.argv) > 3 else None
+                add_task(" ".join(sys.argv[2:3]), deadline)
         elif command == "list":
             list_tasks()
         elif command == "complete":
@@ -168,8 +162,11 @@ if __name__ == "__main__":
                 print("❌ Error: Task ID required.")
             else:
                 delete_task(sys.argv[2])
-        elif command == "clear":
-            clear_all_tasks()
+        elif command == "update-deadline":
+            if len(sys.argv) < 4:
+                print("❌ Error: Task ID and deadline required.")
+            else:
+                update_deadline(sys.argv[2], sys.argv[3])
         elif command == "help":
             print_help()
         else:
